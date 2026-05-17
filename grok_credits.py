@@ -476,15 +476,28 @@ def print_plain(report: Dict[str, Any]) -> None:
     print(f"Source: {report['source']['auth']} → {report['source']['endpoint']}")
 
 
+def _format_updated_line(dt: Optional[datetime] = None) -> str:
+    dt = (dt or datetime.now(timezone.utc)).astimezone()
+    return f"Updated: {dt.strftime('%a %H:%M:%S %Z')}"
+
+
 def print_waybar(report: Dict[str, Any]) -> None:
     reset = report.get("reset_display") or "?"
     percent = float(report.get("credit_usage_percent") or 0.0)
-    tooltip = f"Free credits with {report['plan']}: {report['credit_usage_display']} · Resets {reset}"
+    source = report.get("source") or {}
+    tooltip_lines = [
+        f"Free credits with {report['plan']}: {report['credit_usage_display']} · Resets {reset}",
+        _format_updated_line(),
+    ]
+    if source:
+        auth = source.get("auth", "unknown")
+        tooltip_lines.append(f"Source: {auth}")
+    tooltip_lines.append("Click to refresh")
     print(
         json.dumps(
             {
                 "text": f"Grok {report['credit_usage_display'].replace(' used', '')}",
-                "tooltip": tooltip,
+                "tooltip": "\n".join(tooltip_lines),
                 "class": _waybar_class(percent),
                 "percentage": max(0, min(100, math.ceil(percent))),
             },
@@ -516,7 +529,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     except GrokCreditsError as exc:
         safe_error = _redact_sensitive(exc)
         if args.waybar:
-            print(json.dumps({"text": "Grok ?", "tooltip": safe_error, "class": "error"}, separators=(",", ":")))
+            tooltip = "\n".join([
+                f"Error: {safe_error}",
+                _format_updated_line(),
+                "Click to refresh",
+            ])
+            print(
+                json.dumps(
+                    {"text": "Grok ?", "tooltip": tooltip, "class": "error"},
+                    separators=(",", ":"),
+                )
+            )
             return 1
         print(f"error: {safe_error}", file=sys.stderr)
         return 1

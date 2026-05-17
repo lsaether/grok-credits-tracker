@@ -1,4 +1,8 @@
+import contextlib
+import io
+import json
 import unittest
+from unittest import mock
 
 import grok_credits
 
@@ -36,6 +40,56 @@ class GrokCreditsParserTest(unittest.TestCase):
         message = str(cm.exception)
         self.assertIn("non-grok.com endpoint", message)
         self.assertNotIn(token, message)
+
+    def test_waybar_tooltip_includes_updated_and_refresh_lines(self):
+        report = {
+            "plan": "SuperGrok Heavy",
+            "credit_usage_percent": 12.0,
+            "credit_usage_display": "12% used",
+            "reset_display": "Jun 1",
+            "source": {
+                "auth": "hermes xai-oauth",
+                "endpoint": grok_credits.DEFAULT_ENDPOINT,
+            },
+        }
+        buf = io.StringIO()
+
+        with contextlib.redirect_stdout(buf):
+            grok_credits.print_waybar(report)
+
+        payload = json.loads(buf.getvalue())
+        tooltip_lines = payload["tooltip"].splitlines()
+        self.assertEqual(
+            tooltip_lines[0],
+            "Free credits with SuperGrok Heavy: 12% used · Resets Jun 1",
+        )
+        self.assertRegex(
+            tooltip_lines[1],
+            r"^Updated: [A-Z][a-z]{2} \d{2}:\d{2}:\d{2}(?: .*)?$",
+        )
+        self.assertEqual(tooltip_lines[2], "Source: hermes xai-oauth")
+        self.assertEqual(tooltip_lines[3], "Click to refresh")
+
+    def test_waybar_error_tooltip_includes_updated_and_refresh_lines(self):
+        buf = io.StringIO()
+
+        with mock.patch.object(
+            grok_credits,
+            "build_report",
+            side_effect=grok_credits.GrokCreditsError("boom"),
+        ):
+            with contextlib.redirect_stdout(buf):
+                rc = grok_credits.main(["--waybar"])
+
+        self.assertEqual(rc, 1)
+        payload = json.loads(buf.getvalue())
+        tooltip_lines = payload["tooltip"].splitlines()
+        self.assertEqual(tooltip_lines[0], "Error: boom")
+        self.assertRegex(
+            tooltip_lines[1],
+            r"^Updated: [A-Z][a-z]{2} \d{2}:\d{2}:\d{2}(?: .*)?$",
+        )
+        self.assertEqual(tooltip_lines[2], "Click to refresh")
 
     def test_error_redaction(self):
         redact = getattr(grok_credits, "_redact_sensitive")
