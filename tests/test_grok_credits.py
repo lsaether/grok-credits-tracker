@@ -81,8 +81,10 @@ class GrokCreditsParserTest(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 rc = grok_credits.main(["--waybar"])
 
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, 0)
         payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["text"], "Grok error")
+        self.assertEqual(payload["class"], "error")
         tooltip_lines = payload["tooltip"].splitlines()
         self.assertEqual(tooltip_lines[0], "Error: boom")
         self.assertRegex(
@@ -90,6 +92,19 @@ class GrokCreditsParserTest(unittest.TestCase):
             r"^Updated: [A-Z][a-z]{2} \d{2}:\d{2}:\d{2}(?: .*)?$",
         )
         self.assertEqual(tooltip_lines[2], "Click to refresh")
+
+    def test_waybar_unexpected_error_still_returns_visible_module(self):
+        buf = io.StringIO()
+
+        with mock.patch.object(grok_credits, "build_report", side_effect=ValueError("bad parse")):
+            with contextlib.redirect_stdout(buf):
+                rc = grok_credits.main(["--waybar"])
+
+        self.assertEqual(rc, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["text"], "Grok error")
+        self.assertEqual(payload["class"], "error")
+        self.assertIn("Unexpected error: bad parse", payload["tooltip"])
 
     def test_error_redaction(self):
         redact = getattr(grok_credits, "_redact_sensitive")

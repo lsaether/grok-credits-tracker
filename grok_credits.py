@@ -506,6 +506,20 @@ def print_waybar(report: Dict[str, Any]) -> None:
     )
 
 
+def print_waybar_error(message: str) -> None:
+    tooltip = "\n".join([
+        message,
+        _format_updated_line(),
+        "Click to refresh",
+    ])
+    print(
+        json.dumps(
+            {"text": "Grok error", "tooltip": tooltip, "class": "error"},
+            separators=(",", ":"),
+        )
+    )
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Show grok.com SuperGrok credit usage using Hermes xAI OAuth")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -529,20 +543,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     except GrokCreditsError as exc:
         safe_error = _redact_sensitive(exc)
         if args.waybar:
-            tooltip = "\n".join([
-                f"Error: {safe_error}",
-                _format_updated_line(),
-                "Click to refresh",
-            ])
-            print(
-                json.dumps(
-                    {"text": "Grok ?", "tooltip": tooltip, "class": "error"},
-                    separators=(",", ":"),
-                )
-            )
-            return 1
+            print_waybar_error(f"Error: {safe_error}")
+            return 0
         print(f"error: {safe_error}", file=sys.stderr)
         return 1
+    except Exception as exc:
+        if args.waybar:
+            print_waybar_error(f"Unexpected error: {_redact_sensitive(exc)}")
+            return 0
+        raise
 
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
